@@ -1,0 +1,141 @@
+# UPI-402 Protocol Specification
+
+**Version:** 1.0.0-draft
+
+An open HTTP payment protocol for UPI. Defines how a server advertises a price on an HTTP endpoint and how a client pays using a UPI mandate.
+
+---
+
+## 402 Response
+
+When an endpoint requires payment and the request has no valid authorization, the server responds:
+
+```
+HTTP/1.1 402 Payment Required
+Content-Type: application/json
+X-UPI-402-Version: 1
+```
+
+### Body Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `upi402` | integer | yes | Protocol version. Always `1`. |
+| `payee.vpa` | string | yes | Merchant UPI VPA |
+| `payee.name` | string | yes | Human-readable merchant name |
+| `payment.amount` | number | yes | Amount in rupees |
+| `payment.currency` | string | yes | Always `"INR"` |
+| `payment.description` | string | no | What the payment is for |
+| `mandate.required` | boolean | no | Whether a mandate is needed |
+| `mandate.maxAmount` | number | no | Max per-debit amount |
+| `mandate.frequency` | string | no | `DAILY`, `WEEKLY`, `MONTHLY`, `ON_DEMAND` |
+| `mandate.validUntil` | string | no | ISO 8601 date |
+| `mandate.setupUrl` | string | no | URL to set up a mandate |
+| `receipt.endpoint` | string | no | URL to check payment status |
+| `error` | string | no | Error code on retry failures |
+
+### Example
+
+```json
+{
+  "upi402": 1,
+  "payee": { "vpa": "merchant@ybl", "name": "Example API" },
+  "payment": { "amount": 500, "currency": "INR", "description": "API access" },
+  "mandate": {
+    "required": true,
+    "maxAmount": 5000,
+    "frequency": "DAILY",
+    "validUntil": "2026-12-31"
+  }
+}
+```
+
+## Authorization Header
+
+```
+Authorization: UPI-Mandate umn=<UMN>&txnRef=<TXN_REF>
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `umn` | yes | Unique Mandate Number (NPCI identifier) |
+| `txnRef` | yes | Client-generated transaction reference for idempotency |
+
+Unknown parameters MUST be ignored by the server (forward compatibility). This enables future extensions without breaking existing implementations.
+
+**Reserved for future versions:** `agent`, `grant`
+
+## Receipt Header
+
+On successful payment, the server includes:
+
+```
+X-UPI-402-Receipt: {"txnId":"...","amount":500,"currency":"INR","timestamp":"...","umn":"..."}
+```
+
+The receipt is a JSON object with at minimum: `txnId`, `amount`, `currency`, `timestamp`, `umn`.
+
+## Error Header
+
+On payment failure, the server includes:
+
+```
+X-UPI-402-Error: <error_code>
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `mandate_expired` | Mandate has expired or been revoked |
+| `mandate_invalid` | Mandate reference not found |
+| `debit_failed` | Debit execution failed at the PA |
+| `insufficient_funds` | Payer account has insufficient balance |
+| `limit_exceeded` | Debit exceeds mandate amount or frequency limit |
+
+## HTTP Status Codes
+
+| Code | When |
+|------|------|
+| 402 | Payment required or payment failed |
+| 200 | Payment successful, resource returned |
+| 400 | Malformed authorization header |
+| 500 | Server-side processing error |
+
+## UPI Mandate Constraints
+
+Per NPCI circular UPI-OC-No-200-FY-24-25 (Single Block Multi Debit / Reserve Pay):
+
+- One active block per merchant per customer
+- Maximum amount: Rs 10,000 for Reserve Pay mandates (90-day validity)
+- Standard UPI Autopay mandates support higher limits depending on merchant category
+- Mandate frequency options: as_presented, daily, weekly, monthly, quarterly, yearly
+
+Implementations SHOULD respect these limits and communicate them clearly in the 402 response body via the `mandate.maxAmount` and `mandate.frequency` fields.
+
+## Security Considerations
+
+- Mandate UMNs MUST be treated as bearer credentials. Transmit only over HTTPS.
+- Servers SHOULD validate txnRef uniqueness to prevent replay attacks.
+- The protocol does not define application-level authentication. Layer it on top as needed.
+- Servers SHOULD rate-limit 402 responses to prevent mandate enumeration.
+- PAs (Payment Aggregators) handle all money movement. Neither client nor server touches funds directly.
+
+## Future Extensions
+
+### Agent Identity (v2)
+
+The Authorization header is designed to be extensible. A future version may add:
+
+```
+Authorization: UPI-Mandate umn=ABCD1234&txnRef=TXN789&agent=did:web:myagent.dev&grant=eyJhbG...
+```
+
+- `agent` — Decentralized Identifier (DID) of the requesting agent
+- `grant` — Delegated authorization token (e.g., Grantex JWT)
+
+v1 servers MUST ignore these unknown fields, ensuring forward compatibility.
+
+### Cross-PA Mandate Portability
+
+Currently, mandate verification is tied to the merchant's PA. A future extension may define a standard verification endpoint that any PA can implement, enabling mandate portability across aggregators.
