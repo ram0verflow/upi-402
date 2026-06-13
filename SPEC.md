@@ -117,6 +117,35 @@ If any check fails, the server returns 402 with an error code.
 
 Servers MAY accept unsigned requests for gradual adoption. The `requireSignature` configuration option controls this behavior. When false (default), unsigned requests fall through to the standard verification flow.
 
+## Payment Lifecycle
+
+A payment goes through three possible response states:
+
+| Status | Meaning | Client Action |
+|--------|---------|---------------|
+| 402 | Payment required or failed | Parse requirements, sign, retry |
+| 202 | Payment initiated, awaiting confirmation | Wait `retryAfter` seconds, retry with same Authorization header |
+| 200 | Payment confirmed, resource delivered | Read response + receipt |
+
+### The paymentId rule
+
+- **New paymentId** = new payment attempt. The server issues one per 402 response.
+- **Same paymentId** (consumed) = status check. The server re-verifies with the PA without initiating a new debit.
+
+This distinction prevents double-charging during the 202 polling loop. The client MUST reuse the exact same Authorization header (same paymentId, signature, timestamp) when polling after a 202. Generating a new signature or paymentId would initiate a new payment.
+
+### 202 Response Format
+
+```json
+{
+  "status": "payment_pending",
+  "paymentId": "550e8400-e29b-41d4-a716-446655440000",
+  "retryAfter": 5
+}
+```
+
+The `retryAfter` field indicates how many seconds the client should wait before polling.
+
 ## Receipt Header
 
 On successful payment, the server includes:
