@@ -2,13 +2,18 @@ import type {
   UPI402FetchOptions,
   UPI402FetchResponse,
   UPI402Response,
-  UPI402Receipt,
 } from "./types.js";
 import { UPI402ResponseSchema } from "./types.js";
 import { UPI402PaymentError } from "./errors.js";
 import { generateTxnRef } from "./utils.js";
 import { parseReceiptHeader } from "./parse.js";
 import { generateKeyPair, signPayment, derivePublicKey } from "./signing.js";
+
+const MAX_POLL_ATTEMPTS = 10;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 export async function upi402Fetch(
   url: string | URL,
@@ -74,15 +79,26 @@ export async function upi402Fetch(
 
     headers.set("Authorization", authHeader);
 
-    const retryRes = await fetch(url, { ...fetchOpts, headers });
+    let retryRes = await fetch(url, { ...fetchOpts, headers });
 
-    if (retryRes.status !== 402) {
+    if (retryRes.status === 202) {
+      for (let poll = 0; poll < MAX_POLL_ATTEMPTS; poll++) {
+        let retryAfter = 5;
+        try {
+          const pendingBody = (await retryRes.json()) as { retryAfter?: number };
+          if (pendingBody.retryAfter) retryAfter = pendingBody.retryAfter;
+        } catch { /* use default */ }
+
+        await sleep(retryAfter * 1000);
+        retryRes = await fetch(url, { ...fetchOpts, headers });
+        if (retryRes.status !== 202) break;
+      }
+    }
+
+    if (retryRes.status !== 402 && retryRes.status !== 202) {
       const receiptHeader = retryRes.headers.get("X-UPI-402-Receipt");
       const receipt = receiptHeader ? parseReceiptHeader(receiptHeader) : undefined;
-
-      if (receipt) {
-        onPaymentComplete?.(receipt);
-      }
+      if (receipt) onPaymentComplete?.(receipt);
 
       const enhanced = retryRes as UPI402FetchResponse;
       enhanced.upi402Receipt = receipt ?? undefined;
@@ -93,9 +109,7 @@ export async function upi402Fetch(
       const retryBody = await retryRes.json();
       const retryParsed = UPI402ResponseSchema.safeParse(retryBody);
       if (retryParsed.success) lastError = retryParsed.data;
-    } catch {
-      // ignore parse failure on retry 402
-    }
+    } catch { /* ignore */ }
   }
 
   throw new UPI402PaymentError(
