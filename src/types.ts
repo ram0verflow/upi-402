@@ -85,6 +85,7 @@ export interface UPI402MiddlewareOptions {
   currency?: string;
   description?: string;
   requireSignature?: boolean;
+  store?: import("./store.js").PaymentIdStore;
   mandate?: {
     required?: boolean;
     maxAmount?: number;
