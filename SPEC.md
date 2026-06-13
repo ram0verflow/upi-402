@@ -21,6 +21,7 @@ X-UPI-402-Version: 1
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `upi402` | integer | yes | Protocol version. Always `1`. |
+| `paymentId` | string | yes | Server-generated UUID. Single-use. |
 | `payee.vpa` | string | yes | Merchant UPI VPA |
 | `payee.name` | string | yes | Human-readable merchant name |
 | `payment.amount` | number | yes | Amount in rupees |
@@ -39,6 +40,7 @@ X-UPI-402-Version: 1
 ```json
 {
   "upi402": 1,
+  "paymentId": "550e8400-e29b-41d4-a716-446655440000",
   "payee": { "vpa": "merchant@ybl", "name": "Example API" },
   "payment": { "amount": 500, "currency": "INR", "description": "API access" },
   "mandate": {
@@ -52,18 +54,67 @@ X-UPI-402-Version: 1
 
 ## Authorization Header
 
+### Unsigned (backward compatible)
+
 ```
 Authorization: UPI-Mandate umn=<UMN>&txnRef=<TXN_REF>
+```
+
+### Signed (recommended)
+
+```
+Authorization: UPI-Mandate umn=<UMN>&txnRef=<TXN_REF>&paymentId=<PAYMENT_ID>&amount=<AMOUNT>&ts=<TIMESTAMP>&pub=<PUBLIC_KEY>&sig=<SIGNATURE>
 ```
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `umn` | yes | Unique Mandate Number (NPCI identifier) |
 | `txnRef` | yes | Client-generated transaction reference for idempotency |
+| `paymentId` | for signed | The `paymentId` from the 402 response |
+| `amount` | for signed | Amount the client agrees to pay (must match 402) |
+| `ts` | for signed | Unix timestamp of the signing |
+| `pub` | for signed | Client's Ed25519 public key (base64, URL-encoded) |
+| `sig` | for signed | Ed25519 signature (base64, URL-encoded) |
 
-Unknown parameters MUST be ignored by the server (forward compatibility). This enables future extensions without breaking existing implementations.
+Unknown parameters MUST be ignored by the server (forward compatibility).
 
 **Reserved for future versions:** `agent`, `grant`
+
+## Payment Scoping (Signature Protocol)
+
+Payment scoping prevents a merchant from debiting more than the agreed amount. Both sides hold cryptographic proof of what was agreed.
+
+### Signature Construction
+
+The client signs the following message using Ed25519:
+
+```
+message = "{paymentId}:{amount}:{merchantVpa}:{timestamp}"
+signature = Ed25519.sign(privateKey, message)
+```
+
+### Verification Rules
+
+The server MUST:
+1. Verify the Ed25519 signature against the provided public key
+2. Confirm the signed `amount` matches the amount in the 402 response
+3. Confirm the `paymentId` has not been used before (replay prevention)
+4. Pass the **signed amount** (not the server-configured amount) to the payment verifier
+
+If any check fails, the server returns 402 with an error code.
+
+### Error Codes (Signing)
+
+| Code | Description |
+|------|-------------|
+| `signature_required` | Server requires signed requests but none was provided |
+| `signature_invalid` | Ed25519 signature verification failed |
+| `amount_mismatch` | Signed amount does not match the 402 challenge |
+| `payment_id_replayed` | This paymentId has already been used |
+
+### Backward Compatibility
+
+Servers MAY accept unsigned requests for gradual adoption. The `requireSignature` configuration option controls this behavior. When false (default), unsigned requests fall through to the standard verification flow.
 
 ## Receipt Header
 

@@ -88,6 +88,7 @@ app.get('/api/data', upi402(options), handler);
 | `currency` | string | no | `"INR"` | Currency code |
 | `description` | string | no | — | Payment description |
 | `mandate` | object | no | `{ required: true }` | Mandate configuration |
+| `requireSignature` | boolean | no | `false` | Reject unsigned requests |
 | `verify` | function | no | mock verifier | Verification function |
 
 ### With a real verifier
@@ -143,11 +144,12 @@ const res = await upi402Fetch(url, options);
 |--------|------|----------|---------|-------------|
 | `mandateRef` | string | yes | — | UPI Unique Mandate Number |
 | `txnRef` | string | no | auto-generated | Transaction reference for idempotency |
+| `privateKey` | string | no | auto-generated | Ed25519 private key (base64). Auto-generates a keypair per session if omitted. |
 | `maxRetries` | number | no | `1` | Max retry attempts after 402 |
 | `onPaymentRequired` | function | no | — | Called when 402 is received |
 | `onPaymentComplete` | function | no | — | Called after successful payment |
 
-The client has **zero dependencies**. It wraps `fetch` with 402 retry logic. The response has a `.upi402Receipt` property with the payment receipt.
+The client wraps `fetch` with 402 retry logic. When the server returns a `paymentId` in the 402 response, the client automatically signs the payment agreement with Ed25519 before retrying. The response has a `.upi402Receipt` property with the payment receipt.
 
 ### Error handling
 
@@ -190,9 +192,38 @@ This protocol uses mandates because:
 - The user approves once, the agent can pay within limits
 - It works exactly like how subscription services use UPI autopay today
 
-## How this differs from Pine Labs P3P
+## Payment scoping (overcharge protection)
 
-Pine Labs P3P (Programmable Payment Protocol) solves a similar problem but is permissioned — you need a Pine Labs merchant account and onboarding. upi-402 is permissionless: use any PA to verify mandates and execute debits. Same UPI infrastructure underneath, different access model.
+A malicious merchant could debit more than the agreed amount from a UPI mandate. NPCI enforces mandate-level limits but not per-transaction agreements. upi-402 solves this with decentralized payment scoping — no central authority required.
+
+### How it works
+
+1. Server returns 402 with a unique `paymentId`
+2. Client signs `paymentId:amount:merchantVpa:timestamp` with Ed25519
+3. Client sends signature + public key in the Authorization header
+4. Middleware verifies the signature and passes the **signed amount** to the verifier
+5. If the server tries to debit a different amount, the middleware blocks it
+
+```
+Client signs: "pay-uuid:500:merchant@ybl:1718300000"
+Server receives: signature proves client agreed to exactly ₹500
+Middleware: passes ₹500 to verifier, regardless of server config
+```
+
+### What this prevents
+
+- **Overcharge**: merchant debits ₹500 when client agreed to ₹100 — middleware blocks
+- **Replay**: merchant reuses a paymentId — middleware blocks (single-use)
+- **Tampering**: man-in-middle changes the amount — signature verification fails
+
+### What this doesn't prevent
+
+- Merchant modifies the middleware source code — but client holds signed evidence for dispute
+- Same trust model as HTTPS: you trust the software, disputes handle bad actors
+
+### Backward compatibility
+
+Signing is opt-in. Unsigned requests still work by default. Set `requireSignature: true` on the middleware to enforce signed requests.
 
 ## Future: Agent Identity
 
