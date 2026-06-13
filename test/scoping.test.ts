@@ -43,42 +43,53 @@ describe("payment scoping", () => {
     close();
   });
 
-  it("rejects replayed paymentId", async () => {
+  it("consumed paymentId triggers re-verification (202 poll path)", async () => {
     const app = express();
     app.get(
       "/api/data",
-      upi402({
-        vpa: "m@y",
-        amount: 100,
-      }),
+      upi402({ vpa: "m@y", amount: 100 }),
       (_req, res) => res.json({ ok: true }),
     );
 
     const { port, close } = await listen(app);
 
-    // First request — get a paymentId
     const first402 = await fetch(`http://127.0.0.1:${port}/api/data`);
-    const body = (await first402.json()) as { paymentId: string; payee: { vpa: string }; payment: { amount: number } };
-    const paymentId = body.paymentId;
+    const body = (await first402.json()) as { paymentId: string };
 
     const kp = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
-    const sig = signPayment(kp.privateKey, paymentId, 100, "m@y", ts);
+    const sig = signPayment(kp.privateKey, body.paymentId, 100, "m@y", ts);
+    const auth = `UPI-Mandate umn=M1&txnRef=TX1&paymentId=${body.paymentId}&amount=100&ts=${ts}&pub=${encodeURIComponent(kp.publicKey)}&sig=${encodeURIComponent(sig)}`;
 
-    const auth = `UPI-Mandate umn=M1&txnRef=TX1&paymentId=${paymentId}&amount=100&ts=${ts}&pub=${encodeURIComponent(kp.publicKey)}&sig=${encodeURIComponent(sig)}`;
-
-    // First use — should succeed
-    const res1 = await fetch(`http://127.0.0.1:${port}/api/data`, {
-      headers: { Authorization: auth },
-    });
+    const res1 = await fetch(`http://127.0.0.1:${port}/api/data`, { headers: { Authorization: auth } });
     expect(res1.status).toBe(200);
 
-    // Replay — same paymentId should fail
-    const res2 = await fetch(`http://127.0.0.1:${port}/api/data`, {
-      headers: { Authorization: auth },
-    });
-    expect(res2.status).toBe(402);
-    const errBody = (await res2.json()) as { error: string };
+    // Same paymentId again — re-verifies (poll path), mock succeeds
+    const res2 = await fetch(`http://127.0.0.1:${port}/api/data`, { headers: { Authorization: auth } });
+    expect(res2.status).toBe(200);
+
+    close();
+  });
+
+  it("rejects fabricated paymentId", async () => {
+    const app = express();
+    app.get(
+      "/api/data",
+      upi402({ vpa: "m@y", amount: 100 }),
+      (_req, res) => res.json({ ok: true }),
+    );
+
+    const { port, close } = await listen(app);
+
+    const kp = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const fakeId = "never-issued-by-server";
+    const sig = signPayment(kp.privateKey, fakeId, 100, "m@y", ts);
+    const auth = `UPI-Mandate umn=M1&txnRef=TX1&paymentId=${fakeId}&amount=100&ts=${ts}&pub=${encodeURIComponent(kp.publicKey)}&sig=${encodeURIComponent(sig)}`;
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/data`, { headers: { Authorization: auth } });
+    expect(res.status).toBe(402);
+    const errBody = (await res.json()) as { error: string };
     expect(errBody.error).toBe("payment_id_invalid");
 
     close();

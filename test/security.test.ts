@@ -175,6 +175,10 @@ describe("custom store", () => {
         consumed.push(id);
         return issued.includes(id);
       },
+      async status(id) {
+        if (!issued.includes(id)) return "unknown";
+        return consumed.includes(id) ? "consumed" : "issued";
+      },
     };
 
     const app = express();
