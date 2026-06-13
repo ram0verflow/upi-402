@@ -79,7 +79,7 @@ describe("payment scoping", () => {
     });
     expect(res2.status).toBe(402);
     const errBody = (await res2.json()) as { error: string };
-    expect(errBody.error).toBe("payment_id_replayed");
+    expect(errBody.error).toBe("payment_id_invalid");
 
     close();
   });
@@ -97,7 +97,8 @@ describe("payment scoping", () => {
     const first402 = await fetch(`http://127.0.0.1:${port}/api/data`);
     const body = (await first402.json()) as { paymentId: string };
 
-    const auth = `UPI-Mandate umn=M1&txnRef=TX1&paymentId=${body.paymentId}&amount=100&ts=123&pub=bogus&sig=bogus`;
+    const freshTs = Math.floor(Date.now() / 1000);
+    const auth = `UPI-Mandate umn=M1&txnRef=TX1&paymentId=${body.paymentId}&amount=100&ts=${freshTs}&pub=bogus&sig=bogus`;
     const res = await fetch(`http://127.0.0.1:${port}/api/data`, {
       headers: { Authorization: auth },
     });

@@ -108,6 +108,6 @@ describe("upi402 middleware", () => {
       Authorization: "UPI-Mandate umn=BAD&txnRef=TX1",
     });
     expect(res.status).toBe(402);
-    expect(res.body.error).toBe("insufficient_funds");
+    expect(res.body.error).toBe("debit_failed");
   });
 });
