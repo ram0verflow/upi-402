@@ -1,0 +1,94 @@
+{
+  "name": "upi-402",
+  "version": "0.1.0",
+  "description": "Open HTTP 402 payment standard for UPI",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./dist/client.cjs"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "require": "./dist/types.cjs"
+    },
+    "./verifiers/razorpay": {
+      "types": "./dist/verifiers/razorpay.d.ts",
+      "import": "./dist/verifiers/razorpay.js",
+      "require": "./dist/verifiers/razorpay.cjs"
+    },
+    "./verifiers/phonepe": {
+      "types": "./dist/verifiers/phonepe.d.ts",
+      "import": "./dist/verifiers/phonepe.js",
+      "require": "./dist/verifiers/phonepe.cjs"
+    },
+    "./verifiers/cashfree": {
+      "types": "./dist/verifiers/cashfree.d.ts",
+      "import": "./dist/verifiers/cashfree.js",
+      "require": "./dist/verifiers/cashfree.cjs"
+    },
+    "./verifiers/stripe": {
+      "types": "./dist/verifiers/stripe.d.ts",
+      "import": "./dist/verifiers/stripe.js",
+      "require": "./dist/verifiers/stripe.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SPEC.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:razorpay": "npx tsx test/razorpay.integration.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "express": "^4.21.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.22.4",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "keywords": [
+    "upi",
+    "402",
+    "http-402",
+    "payment",
+    "mandate",
+    "npci",
+    "india",
+    "agent",
+    "mcp"
+  ],
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
