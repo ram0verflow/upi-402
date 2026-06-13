@@ -6,14 +6,15 @@ import type {
 } from "./types.js";
 import { UPI402ResponseSchema } from "./types.js";
 import { UPI402PaymentError } from "./errors.js";
-import { formatMandateHeader, generateTxnRef } from "./utils.js";
+import { generateTxnRef } from "./utils.js";
 import { parseReceiptHeader } from "./parse.js";
+import { generateKeyPair, signPayment, derivePublicKey } from "./signing.js";
 
 export async function upi402Fetch(
   url: string | URL,
   opts: UPI402FetchOptions & RequestInit,
 ): Promise<UPI402FetchResponse> {
-  const { mandateRef, txnRef, maxRetries = 1, onPaymentRequired, onPaymentComplete, ...fetchOpts } = opts;
+  const { mandateRef, txnRef, privateKey, maxRetries = 1, onPaymentRequired, onPaymentComplete, ...fetchOpts } = opts;
 
   const firstRes = await fetch(url, fetchOpts);
 
@@ -48,10 +49,30 @@ export async function upi402Fetch(
 
   let lastError: UPI402Response = details;
 
+  const keyPair = privateKey
+    ? { privateKey, publicKey: derivePublicKey(privateKey) }
+    : generateKeyPair();
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const ref = txnRef ?? generateTxnRef();
     const headers = new Headers(fetchOpts.headers);
-    headers.set("Authorization", formatMandateHeader(mandateRef, ref));
+
+    let authHeader = `UPI-Mandate umn=${mandateRef}&txnRef=${ref}`;
+
+    if (details.paymentId) {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const amount = details.payment.amount;
+      const sig = signPayment(
+        keyPair.privateKey,
+        details.paymentId,
+        amount,
+        details.payee.vpa,
+        timestamp,
+      );
+      authHeader += `&paymentId=${details.paymentId}&amount=${amount}&ts=${timestamp}&pub=${encodeURIComponent(keyPair.publicKey)}&sig=${encodeURIComponent(sig)}`;
+    }
+
+    headers.set("Authorization", authHeader);
 
     const retryRes = await fetch(url, { ...fetchOpts, headers });
 

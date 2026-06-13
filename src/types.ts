@@ -35,6 +35,7 @@ export const ReceiptConfigSchema = z.object({
 
 export const UPI402ResponseSchema = z.object({
   upi402: z.literal(UPI_402_VERSION),
+  paymentId: z.string().optional(),
   payee: PayeeSchema,
   payment: PaymentSchema,
   mandate: MandateSchema.optional(),
@@ -55,7 +56,12 @@ export interface UPI402Receipt {
 export interface ParsedMandateAuth {
   umn: string;
   txnRef: string;
-  [key: string]: string;
+  paymentId?: string;
+  amount?: string;
+  ts?: string;
+  pub?: string;
+  sig?: string;
+  [key: string]: string | undefined;
 }
 
 export type VerifyFunction = (
@@ -78,6 +84,7 @@ export interface UPI402MiddlewareOptions {
   amount: number;
   currency?: string;
   description?: string;
+  requireSignature?: boolean;
   mandate?: {
     required?: boolean;
     maxAmount?: number;
@@ -91,6 +98,7 @@ export interface UPI402MiddlewareOptions {
 export interface UPI402FetchOptions {
   mandateRef: string;
   txnRef?: string;
+  privateKey?: string;
   maxRetries?: number;
   onPaymentRequired?: (details: UPI402Response) => void;
   onPaymentComplete?: (receipt: UPI402Receipt) => void;
