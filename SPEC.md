@@ -110,7 +110,8 @@ If any check fails, the server returns 402 with an error code.
 | `signature_required` | Server requires signed requests but none was provided |
 | `signature_invalid` | Ed25519 signature verification failed |
 | `amount_mismatch` | Signed amount does not match the 402 challenge |
-| `payment_id_replayed` | This paymentId has already been used |
+| `payment_id_invalid` | paymentId was never issued or has already been consumed |
+| `timestamp_expired` | Signed timestamp is outside the acceptable window |
 
 ### Backward Compatibility
 
@@ -171,6 +172,11 @@ Implementations SHOULD respect these limits and communicate them clearly in the 
 - The protocol does not define application-level authentication. Layer it on top as needed.
 - Servers SHOULD rate-limit 402 responses to prevent mandate enumeration.
 - PAs (Payment Aggregators) handle all money movement. Neither client nor server touches funds directly.
+- paymentIds are server-issued challenges. They are single-use and expire after 5 minutes. Servers MUST NOT accept a paymentId they did not issue.
+- Signed timestamps MUST be within 5 minutes of server time. This bounds the replay window even if the paymentId store loses state (e.g., process restart).
+- Implementers MUST use persistent storage for the PaymentIdStore in production if the replay window after process restart is unacceptable for their use case.
+- The default in-memory store is suitable for single-process deployments where a 5-minute replay window after restart is acceptable (bounded by timestamp validation).
+- Servers MUST NOT expose internal verifier error details to clients. The client-facing error code for all debit failures is `debit_failed`. Detailed errors should be logged server-side only.
 
 ## Future Extensions
 
