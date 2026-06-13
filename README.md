@@ -2,7 +2,7 @@
 
 Open HTTP 402 payment standard for UPI.
 
-x402 brought HTTP 402 to crypto. L402 brought it to Lightning. This brings it to UPI — the world's largest real-time payment network. 23 billion transactions/month. Open standard. PA-agnostic. MIT license.
+x402 brought HTTP 402 to crypto. L402 brought it to Lightning. This brings it to UPI — the world's largest real-time payment network. 23 billion transactions/month. Open standard. PA-agnostic. 
 
 ## Install
 
