@@ -1,6 +1,9 @@
+export type PaymentIdState = "issued" | "consumed" | "unknown";
+
 export interface PaymentIdStore {
   issue(paymentId: string): Promise<void>;
   consume(paymentId: string): Promise<boolean>;
+  status(paymentId: string): Promise<PaymentIdState>;
 }
 
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
@@ -33,6 +36,16 @@ export class MemoryStore implements PaymentIdStore {
     }
     entry.consumed = true;
     return true;
+  }
+
+  async status(paymentId: string): Promise<PaymentIdState> {
+    const entry = this.entries.get(paymentId);
+    if (!entry) return "unknown";
+    if (Date.now() - entry.issuedAt > this.ttlMs) {
+      this.entries.delete(paymentId);
+      return "unknown";
+    }
+    return entry.consumed ? "consumed" : "issued";
   }
 
   destroy(): void {

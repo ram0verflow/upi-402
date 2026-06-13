@@ -73,6 +73,7 @@ export type VerifyFunction = (
 
 export interface VerifyResult {
   success: boolean;
+  pending?: boolean;
   txnId?: string;
   error?: string;
   receipt?: Record<string, unknown>;
