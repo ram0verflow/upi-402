@@ -1,7 +1,7 @@
 export { upi402 } from "./middleware.js";
 export { mockVerifier } from "./verifiers/mock.js";
 export { generateKeyPair, signPayment, verifyPayment } from "./signing.js";
-export { MemoryStore } from "./store.js";
+export { MemoryStore, type PaymentIdState } from "./store.js";
 export type {
   UPI402MiddlewareOptions,
   UPI402Receipt,
