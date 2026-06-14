@@ -31,27 +31,13 @@
       "types": "./dist/verifiers/razorpay.d.ts",
       "import": "./dist/verifiers/razorpay.js",
       "require": "./dist/verifiers/razorpay.cjs"
-    },
-    "./verifiers/phonepe": {
-      "types": "./dist/verifiers/phonepe.d.ts",
-      "import": "./dist/verifiers/phonepe.js",
-      "require": "./dist/verifiers/phonepe.cjs"
-    },
-    "./verifiers/cashfree": {
-      "types": "./dist/verifiers/cashfree.d.ts",
-      "import": "./dist/verifiers/cashfree.js",
-      "require": "./dist/verifiers/cashfree.cjs"
-    },
-    "./verifiers/stripe": {
-      "types": "./dist/verifiers/stripe.d.ts",
-      "import": "./dist/verifiers/stripe.js",
-      "require": "./dist/verifiers/stripe.cjs"
     }
   },
   "files": [
     "dist",
     "README.md",
     "SPEC.md",
+    "PA_RESEARCH.md",
     "LICENSE"
   ],
   "scripts": {

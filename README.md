@@ -166,20 +166,18 @@ try {
 }
 ```
 
-## Verifier Status
+## Verifiers
 
 | Verifier | Status | Notes |
 |----------|--------|-------|
-| Mock | Tested | Full 402 -> retry -> 200 flow, all tests passing |
-| Razorpay | Implemented | Requires S2S enablement on Razorpay account |
-| PhonePe | From docs | Built from API documentation, not tested with credentials |
-| Cashfree | From docs | Built from API documentation, not tested with credentials |
-| Stripe | From docs | Built from API documentation, not tested with credentials |
-| Custom | Supported | Pass any async function matching VerifyFunction interface |
+| Mock | Tested | Full 402 -> sign -> 202 -> 200 flow, all tests passing |
+| Razorpay | Implemented | Targets POST /v1/payments/create/recurring (instant charge). Requires S2S enablement on Razorpay account |
 
-Contributions testing verifiers with real PA credentials are very welcome.
+See [PA_RESEARCH.md](./PA_RESEARCH.md) for why other PAs were evaluated and excluded.
 
-Agent-side code (`upi-402/client`) has zero dependencies. Verifier code is server-side only and tree-shakeable — importing `upi-402/client` never pulls in any PA SDK.
+The verify interface is simple — implement one async function returning `{ success, pending, txnId }`. PRs adding verifiers for PAs that support instant charge (no scheduling) are welcome.
+
+Agent-side code (`upi-402/client`) has zero dependencies. Verifier code is server-side only and tree-shakeable.
 
 ## How UPI mandates work
 

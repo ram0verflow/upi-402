@@ -207,6 +207,17 @@ Implementations SHOULD respect these limits and communicate them clearly in the 
 - The default in-memory store is suitable for single-process deployments where a 5-minute replay window after restart is acceptable (bounded by timestamp validation).
 - Servers MUST NOT expose internal verifier error details to clients. The client-facing error code for all debit failures is `debit_failed`. Detailed errors should be logged server-side only.
 
+## PA Requirements
+
+The upi-402 protocol requires synchronous or near-synchronous payment execution. When an agent retries a 402 with a mandate reference, the server must be able to verify and execute the charge within the HTTP request lifecycle.
+
+This means the underlying PA must support:
+- On-demand charge execution (no mandatory future scheduling)
+- API-triggered debits (server-to-server, no checkout UI)
+- Instant or near-instant status confirmation
+
+PAs that require `payment_schedule_date` set to a future date or that only process charges via background schedulers are NOT compatible with this protocol.
+
 ## Future Extensions
 
 ### Agent Identity (v2)
