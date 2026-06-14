@@ -1,68 +1,117 @@
 import { describe, it, expect } from "vitest";
-import { createHandler } from "../src/handler.js";
+import { handleUPI402 } from "../src/handler.js";
 import { generateKeyPair, signPayment } from "../src/signing.js";
+import { MemoryStore } from "../src/store.js";
 
-describe("handler (framework-agnostic)", () => {
-  it("returns 402 when no authorization header", async () => {
-    const handle = createHandler({ vpa: "m@y", amount: 100 });
-    const result = await handle({ headers: {} });
-    expect(result.status).toBe(402);
-    expect(result.proceed).toBe(false);
-    expect((result.body as Record<string, unknown>).upi402).toBe(1);
-    expect(result.headers["X-UPI-402-Version"]).toBe("1");
+function req(headers?: Record<string, string>): Request {
+  return new Request("http://localhost/api/data", { headers });
+}
+
+describe("handleUPI402 (Web Standard Request)", () => {
+  it("returns payment_required when no authorization", async () => {
+    const store = new MemoryStore();
+    const result = await handleUPI402(req(), { vpa: "m@y", amount: 100, store });
+    expect(result.action).toBe("payment_required");
+    expect(result.response).toBeTruthy();
+    expect(result.response!.status).toBe(402);
+    const body = await result.response!.json();
+    expect(body.upi402).toBe(1);
+    expect(body.paymentId).toBeTruthy();
+    expect(body.payee.vpa).toBe("m@y");
+    expect(body.payment.amount).toBe(100);
+    store.destroy();
   });
 
-  it("returns 200 + receipt for valid unsigned mandate", async () => {
-    const handle = createHandler({ vpa: "m@y", amount: 100 });
-    const result = await handle({
-      headers: { authorization: "UPI-Mandate umn=TEST&txnRef=TX1" },
-    });
-    expect(result.status).toBe(200);
-    expect(result.proceed).toBe(true);
+  it("returns payment_confirmed for valid unsigned mandate (mock)", async () => {
+    const store = new MemoryStore();
+    const result = await handleUPI402(
+      req({ authorization: "UPI-Mandate umn=TEST&txnRef=TX1" }),
+      { vpa: "m@y", amount: 100, store },
+    );
+    expect(result.action).toBe("payment_confirmed");
+    expect(result.response).toBeUndefined();
     expect(result.receipt).toBeTruthy();
     expect(result.receipt!.amount).toBe(100);
     expect(result.receipt!.mock).toBe(true);
-    expect(result.headers["X-UPI-402-Receipt"]).toBeTruthy();
+    store.destroy();
   });
 
-  it("returns 402 with paymentId for signing", async () => {
-    const handle = createHandler({ vpa: "m@y", amount: 50 });
-    const result = await handle({ headers: {} });
-    expect(result.status).toBe(402);
-    const body = result.body as Record<string, unknown>;
-    expect(body.paymentId).toBeTruthy();
-    expect(typeof body.paymentId).toBe("string");
+  it("returns paymentId in 402 body for signing", async () => {
+    const store = new MemoryStore();
+    const result = await handleUPI402(req(), { vpa: "m@y", amount: 50, store });
+    expect(result.action).toBe("payment_required");
+    expect(result.paymentId).toBeTruthy();
+    const body = await result.response!.json();
+    expect(body.paymentId).toBe(result.paymentId);
+    store.destroy();
   });
 
-  it("full signed flow: 402 → sign → 200", async () => {
-    const handle = createHandler({ vpa: "m@y", amount: 200 });
+  it("full signed flow: 402 then sign then confirmed", async () => {
+    const store = new MemoryStore();
+    const opts = { vpa: "m@y", amount: 200, store };
 
-    const first = await handle({ headers: {} });
-    expect(first.status).toBe(402);
-    const paymentId = (first.body as Record<string, unknown>).paymentId as string;
+    const first = await handleUPI402(req(), opts);
+    expect(first.action).toBe("payment_required");
+    const paymentId = first.paymentId!;
 
     const kp = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const sig = signPayment(kp.privateKey, paymentId, 200, "m@y", ts);
     const auth = `UPI-Mandate umn=M1&txnRef=TX1&paymentId=${paymentId}&amount=200&ts=${ts}&pub=${encodeURIComponent(kp.publicKey)}&sig=${encodeURIComponent(sig)}`;
 
-    const second = await handle({ headers: { authorization: auth } });
-    expect(second.status).toBe(200);
-    expect(second.proceed).toBe(true);
+    const second = await handleUPI402(req({ authorization: auth }), opts);
+    expect(second.action).toBe("payment_confirmed");
     expect(second.receipt!.amount).toBe(200);
+    store.destroy();
   });
 
   it("uses custom verifier", async () => {
-    const handle = createHandler({
-      vpa: "m@y",
-      amount: 10,
-      verify: async () => ({ success: true, txnId: "CUSTOM-001" }),
-    });
-
-    const result = await handle({
-      headers: { authorization: "UPI-Mandate umn=M1&txnRef=TX1" },
-    });
-    expect(result.status).toBe(200);
+    const store = new MemoryStore();
+    const result = await handleUPI402(
+      req({ authorization: "UPI-Mandate umn=M1&txnRef=TX1" }),
+      {
+        vpa: "m@y",
+        amount: 10,
+        store,
+        verify: async () => ({ success: true, txnId: "CUSTOM-001" }),
+      },
+    );
+    expect(result.action).toBe("payment_confirmed");
     expect(result.receipt!.txnId).toBe("CUSTOM-001");
+    store.destroy();
+  });
+
+  it("returns payment_failed when verifier fails", async () => {
+    const store = new MemoryStore();
+    const result = await handleUPI402(
+      req({ authorization: "UPI-Mandate umn=M1&txnRef=TX1" }),
+      {
+        vpa: "m@y",
+        amount: 10,
+        store,
+        verify: async () => ({ success: false, error: "insufficient_funds" }),
+      },
+    );
+    expect(result.action).toBe("payment_failed");
+    expect(result.response!.status).toBe(402);
+    const body = await result.response!.json();
+    expect(body.error).toBe("debit_failed");
+    store.destroy();
+  });
+
+  it("returns payment_pending for pending verifier", async () => {
+    const store = new MemoryStore();
+    const result = await handleUPI402(
+      req({ authorization: "UPI-Mandate umn=M1&txnRef=TX1" }),
+      {
+        vpa: "m@y",
+        amount: 10,
+        store,
+        verify: async () => ({ success: false, pending: true }),
+      },
+    );
+    expect(result.action).toBe("payment_pending");
+    expect(result.response!.status).toBe(202);
+    store.destroy();
   });
 });
