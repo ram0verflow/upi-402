@@ -10,6 +10,12 @@ x402 brought HTTP 402 to crypto. L402 brought it to Lightning. This brings it to
 npm install upi-402
 ```
 
+From git (builds `dist/` via `prepare`):
+
+```bash
+npm install github:ram0verflow/upi-402
+```
+
 ## Quick start
 
 **Server** (5 lines):

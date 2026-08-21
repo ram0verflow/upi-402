@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 (2026-08-21)
+
+- Add a `prepare` script so GitHub installs (`github:ram0verflow/upi-402`) build `dist/` before npm packs. The repo does not commit `dist/`, and `files` only includes it, so git consumers previously got a docs-only package.
+
 ## 0.1.0 (2026-06-14)
 
 Initial release.
